@@ -271,6 +271,7 @@
     $("sUnit").value = entry ? entry.unit || "l/ha" : lastUnit();
     $("sNote").value = entry ? entry.note || "" : "";
     $("delEntry").hidden = !entry;
+    $("newActRow").hidden = true; $("sNewAct").value = "";
     renderSheetField(); renderTiles(); renderPhotos(); updateSave();
     $("sheet").classList.add("open"); $("sheet").setAttribute("aria-hidden", "false");
     $("sheet").querySelector(".sheet-body").scrollTop = 0;
@@ -297,7 +298,19 @@
       const b = el("button", "tile", a); b.type = "button"; b.setAttribute("aria-pressed", draft.act === a ? "true" : "false");
       b.onclick = () => { draft.act = a; renderTiles(); updateSave(); }; t.append(b);
     });
+    const add = el("button", "tile add", "+ Neu"); add.type = "button";
+    add.onclick = () => { $("newActRow").hidden = false; $("sNewAct").focus(); };
+    t.append(add);
   }
+  async function addActFromSheet() {
+    const v = $("sNewAct").value.trim(); if (!v || !draft) return;
+    if (!acts.some((a) => a.toLowerCase() === v.toLowerCase())) { acts.push(v); try { await DB.put("meta", { key: "acts", value: acts }); } catch (e) {} }
+    draft.act = acts.find((a) => a.toLowerCase() === v.toLowerCase());
+    $("sNewAct").value = ""; $("newActRow").hidden = true;
+    renderTiles(); updateSave(); renderActs(); toast("„" + draft.act + "“ hinzugefügt");
+  }
+  $("sNewActAdd").onclick = addActFromSheet;
+  $("sNewAct").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addActFromSheet(); } });
   function updateSave() { const b = $("save"); b.disabled = !draft.act; b.textContent = draft.act ? "Speichern" : "Arbeitsschritt wählen"; }
 
   async function shrink(file) {
