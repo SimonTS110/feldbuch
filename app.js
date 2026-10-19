@@ -214,7 +214,7 @@
   function pickField(id) {
     manual = !(detected && detected.id === id); current = fieldById(id) || null;
     restyle(); renderHere();
-    if (draft) { draft.fieldId = id; renderSheetField(); }
+    if (draft) { draft.fieldId = id; renderSheetField(); dieselCalc(); }
   }
   function renderHere() {
     const sub = $("hereSub");
@@ -272,6 +272,9 @@
     $("sNote").value = entry ? entry.note || "" : "";
     $("delEntry").hidden = !entry;
     $("newActRow").hidden = true; $("sNewAct").value = "";
+    $("sDiesel").value = entry && entry.diesel ? +entry.diesel.toFixed(2) : "";
+    $("sDieselMode").value = entry && entry.diesel ? "total" : dieselMode();
+    dieselCalc();
     renderSheetField(); renderTiles(); renderPhotos(); updateSave();
     $("sheet").classList.add("open"); $("sheet").setAttribute("aria-hidden", "false");
     $("sheet").querySelector(".sheet-body").scrollTop = 0;
@@ -280,6 +283,25 @@
     if (draft) draft.newPhotos.forEach((p) => URL.revokeObjectURL(p.url));
     draft = null; $("sheet").classList.remove("open"); $("sheet").setAttribute("aria-hidden", "true");
   }
+  const dieselMode = () => { try { return localStorage.getItem("feldbuch.dieselMode") || "total"; } catch (e) { return "total"; } };
+  const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return isFinite(n) && n > 0 ? n : null; };
+  const fmtL = (v, d) => v.toLocaleString("de-DE", { maximumFractionDigits: d == null ? 1 : d });
+  function dieselOf(fieldId) {
+    const v = num($("sDiesel").value), f = fieldById(fieldId);
+    if (v == null) return { total: null, perHa: null };
+    if ($("sDieselMode").value === "ha") return { total: f ? v * f.ha : null, perHa: v };
+    return { total: v, perHa: f && f.ha ? v / f.ha : null };
+  }
+  function dieselCalc() {
+    if (!draft) return;
+    const f = fieldById(draft.fieldId), d = dieselOf(draft.fieldId), t = $("sDieselCalc");
+    if (d.total == null && d.perHa == null) { t.textContent = ""; return; }
+    t.textContent = $("sDieselMode").value === "ha"
+      ? (d.total != null ? "= " + fmtL(d.total) + " l gesamt bei " + fmtHa(f.ha) : "")
+      : (d.perHa != null ? "= " + fmtL(d.perHa) + " l/ha bei " + fmtHa(f.ha) : "");
+  }
+  $("sDiesel").addEventListener("input", dieselCalc);
+  $("sDieselMode").addEventListener("change", () => { try { localStorage.setItem("feldbuch.dieselMode", $("sDieselMode").value); } catch (e) {} dieselCalc(); });
   const lastUnit = () => { try { return localStorage.getItem("feldbuch.unit") || "l/ha"; } catch (e) { return "l/ha"; } };
   $("startEntry").onclick = () => openSheet(null);
   $("closeSheet").onclick = closeSheet;
@@ -347,9 +369,11 @@
   $("save").onclick = async () => {
     if (!draft || !draft.act) return;
     const f = fieldById(draft.fieldId);
+    const ds = dieselOf(draft.fieldId);
     const e = {
       id: draft.id || uid(), fieldId: draft.fieldId, fieldName: f ? f.name : "", act: draft.act,
       date: $("sDate").value || today(), amount: $("sAmount").value.trim(), unit: $("sUnit").value, note: $("sNote").value.trim(),
+      diesel: ds.total != null ? +ds.total.toFixed(2) : null, dieselHa: ds.perHa != null ? +ds.perHa.toFixed(2) : null,
       photoIds: draft.photoIds.filter((id) => !draft.removed.includes(id)).concat(draft.newPhotos.map((p) => p.id)),
       created: draft.created || Date.now(), updated: Date.now(), auto: draft.id ? !!draft.auto : !!draft.auto,
       pos: !draft.id && pos ? [+pos[0].toFixed(6), +pos[1].toFixed(6)] : undefined,
@@ -407,6 +431,7 @@
       m.append(el("div", "entry-act", e.act));
       const f = fieldById(e.fieldId);
       m.append(el("div", "entry-meta", fieldName(e) + (f ? " · " + fmtHa(f.ha) : "") + (e.amount ? " · " + String(e.amount).replace(".", ",") + " " + e.unit : "")));
+      if (e.diesel) m.append(el("div", "entry-meta", "Diesel " + fmtL(e.diesel) + " l" + (e.dieselHa ? " · " + fmtL(e.dieselHa) + " l/ha" : "")));
       if (e.note) m.append(el("div", "entry-note", e.note));
       if (e.photoIds.length > 1) m.append(el("div", "note", e.photoIds.length + " Fotos"));
       c.append(m);
@@ -444,7 +469,10 @@
   function openField(f) {
     openFieldId = f.id; $("fName").value = f.name;
     const n = entries.filter((e) => e.fieldId === f.id).length;
-    $("fInfo").textContent = fmtHa(f.ha) + " · " + n + (n === 1 ? " Eintrag" : " Einträge") + (f.source ? " · Quelle: " + f.source : "");
+    const yr = String(new Date().getFullYear());
+    const dsl = entries.filter((e) => e.fieldId === f.id && e.diesel && e.date.startsWith(yr)).reduce((s, e) => s + e.diesel, 0);
+    $("fInfo").textContent = fmtHa(f.ha) + " · " + n + (n === 1 ? " Eintrag" : " Einträge") +
+      (dsl ? " · Diesel " + yr + ": " + fmtL(dsl, 0) + " l (" + fmtL(dsl / f.ha) + " l/ha)" : "") + (f.source ? " · Quelle: " + f.source : "");
     const h = $("fHistory"); h.innerHTML = "";
     const hist = (f.history || []).slice().reverse();
     if (hist.length) {
@@ -608,10 +636,11 @@
   };
   $("btnCsv").onclick = async () => {
     const q = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
-    const rows = [["Datum", "Feld", "Fläche ha", "Arbeitsschritt", "Menge", "Einheit", "Notiz", "Fotos"].map(q).join(";")];
+    const rows = [["Datum", "Feld", "Fläche ha", "Arbeitsschritt", "Menge", "Einheit", "Diesel l", "Diesel l/ha", "Notiz", "Fotos"].map(q).join(";")];
+    const dc = (v) => (v ? String(v).replace(".", ",") : "");
     entries.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((e) => {
       const f = fieldById(e.fieldId);
-      rows.push([dDate(e.date), fieldName(e), f ? f.ha.toFixed(2).replace(".", ",") : "", e.act, String(e.amount || "").replace(".", ","), e.amount ? e.unit : "", e.note, e.photoIds.length].map(q).join(";"));
+      rows.push([dDate(e.date), fieldName(e), f ? f.ha.toFixed(2).replace(".", ",") : "", e.act, String(e.amount || "").replace(".", ","), e.amount ? e.unit : "", dc(e.diesel), dc(e.dieselHa), e.note, e.photoIds.length].map(q).join(";"));
     });
     await deliver(new Blob(["﻿" + rows.join("\r\n")], { type: "text/csv" }), "feldbuch-tagebuch-" + stamp() + ".csv");
   };

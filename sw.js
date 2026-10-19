@@ -1,5 +1,5 @@
 // Feldbuch Service Worker: App offline, besuchte Kartenkacheln werden zwischengespeichert
-const VERSION = "feldbuch-v3";
+const VERSION = "feldbuch-v4";
 const TILES = "feldbuch-tiles-v1";
 const MAX_TILES = 3000;
 const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest",

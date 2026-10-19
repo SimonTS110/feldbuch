@@ -85,7 +85,7 @@
         </div>
 
         <div class="note" id="storageInfo"></div>
-        <div class="note">App-Version 1.1 (20.10.2026)</div>
+        <div class="note">App-Version 1.2 (20.10.2026)</div>
       </div>
     </section>
   </main>
@@ -132,6 +132,16 @@
             <option>l/ha</option><option>kg/ha</option><option>Kö/m²</option><option>t/ha</option><option>m³/ha</option><option>dt/ha</option>
           </select>
         </div>
+      </div>
+      <div class="sec">
+        <label class="label" for="sDiesel">Diesel (optional)</label>
+        <div class="amount">
+          <input type="number" id="sDiesel" inputmode="decimal" placeholder="z. B. 45" min="0" step="any">
+          <select id="sDieselMode" aria-label="Diesel-Einheit">
+            <option value="total">Liter gesamt</option><option value="ha">l/ha</option>
+          </select>
+        </div>
+        <div class="note" id="sDieselCalc"></div>
       </div>
       <div class="sec">
         <label class="label" for="sNote">Notiz (optional)</label>
