@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Feldbuch</title>
+<meta name="theme-color" content="#2e6b2b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Feldbuch</div>
+    <button class="gps" id="gpsChip" type="button"><i></i><span id="gpsText">GPS startet …</span></button>
+  </header>
+
+  <main class="views">
+    <!-- KARTE -->
+    <section class="view view-map" id="v-map">
+      <div class="map" id="map"></div>
+      <div class="mapctl">
+        <button id="btnFollow" type="button" aria-label="Zu meiner Position">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+        </button>
+        <button id="btnAll" type="button">Alle</button>
+        <button id="btnLayer" type="button" aria-label="Kartenhintergrund wechseln">
+          <svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>
+        </button>
+      </div>
+      <div class="here" id="here">
+        <div class="here-row">
+          <div class="here-txt">
+            <div class="label" id="hereLabel">Position</div>
+            <div class="here-name" id="hereName">Warte auf GPS …</div>
+            <div class="here-sub" id="hereSub"></div>
+          </div>
+          <button class="btn btn-ghost btn-small" id="changeField" type="button">Feld ändern</button>
+        </div>
+        <button class="btn btn-primary" id="startEntry" type="button">Arbeitsschritt eintragen</button>
+      </div>
+      <div class="map-empty" id="mapEmpty" hidden>
+        <b>Noch keine Felder</b>
+        <p>Lade deine Feldgrenzen als Shapefile (.zip), KML, KMZ, GeoJSON oder GPX.</p>
+        <button class="btn btn-primary" type="button" data-action="import">Feldgrenzen laden</button>
+      </div>
+    </section>
+
+    <!-- TAGEBUCH -->
+    <section class="view" id="v-log" hidden>
+      <div class="wrap">
+        <div class="head-row"><h2>Tagebuch</h2><span class="note" id="logCount"></span></div>
+        <div class="filters">
+          <select id="logField" aria-label="Feld filtern"></select>
+          <select id="logYear" aria-label="Jahr filtern"></select>
+        </div>
+        <div id="logList" class="loglist"></div>
+      </div>
+    </section>
+
+    <!-- FELDER -->
+    <section class="view" id="v-fields" hidden>
+      <div class="wrap">
+        <div class="head-row"><h2>Felder</h2><span class="note" id="fieldsSum"></span></div>
+        <div class="flist" id="fieldList"></div>
+
+        <h3>Daten</h3>
+        <div class="menu">
+          <button type="button" data-action="import"><b>Feldgrenzen laden</b><span>Shapefile (.zip), KML/KMZ, GeoJSON, GPX</span></button>
+          <button type="button" id="btnBackup"><b>Backup speichern</b><span>Alles inkl. Fotos als eine Datei, z. B. nach Google Drive</span></button>
+          <button type="button" id="btnCsv"><b>Tagebuch als Tabelle</b><span>CSV für Excel</span></button>
+          <button type="button" id="btnGeo"><b>Feldgrenzen exportieren</b><span>GeoJSON</span></button>
+          <button type="button" id="btnRestore"><b>Backup wiederherstellen</b><span>Ersetzt alle Daten auf diesem Handy</span></button>
+        </div>
+        <div class="note" id="lastBackup"></div>
+
+        <h3>Arbeitsschritte</h3>
+        <div class="acts" id="actList"></div>
+        <div class="row">
+          <input type="text" id="actNew" placeholder="Neuer Arbeitsschritt" aria-label="Neuer Arbeitsschritt">
+          <button class="btn btn-ghost" id="actAdd" type="button">Hinzufügen</button>
+        </div>
+
+        <div class="note" id="storageInfo"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-v="v-map" type="button"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Karte</button>
+    <button class="tab" role="tab" aria-selected="false" data-v="v-log" type="button"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Tagebuch</button>
+    <button class="tab" role="tab" aria-selected="false" data-v="v-fields" type="button"><svg viewBox="0 0 24 24"><path d="M4 7 11 4l9 3-2 12-9 2-5-6z"/></svg>Felder</button>
+  </nav>
+</div>
+
+<!-- EINTRAG -->
+<div class="sheet" id="sheet" aria-hidden="true">
+  <div class="sheet-head">
+    <h2 id="sheetTitle">Neuer Eintrag</h2>
+    <button class="btn btn-ghost btn-small" id="closeSheet" type="button">Abbrechen</button>
+  </div>
+  <div class="sheet-body">
+    <div class="wrap">
+      <div class="sec">
+        <div class="label">Feld</div>
+        <div class="fieldpick">
+          <div><b id="sFieldName">–</b><div><span class="tag" id="sFieldTag"></span></div></div>
+          <button class="btn btn-ghost btn-small" id="sChangeField" type="button">Ändern</button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="label">Arbeitsschritt</div>
+        <div class="tiles" id="tiles"></div>
+      </div>
+      <div class="sec">
+        <label class="label" for="sDate">Datum</label>
+        <input type="date" id="sDate">
+      </div>
+      <div class="sec">
+        <label class="label" for="sAmount">Menge (optional)</label>
+        <div class="amount">
+          <input type="number" id="sAmount" inputmode="decimal" placeholder="z. B. 180" min="0" step="any">
+          <select id="sUnit" aria-label="Einheit">
+            <option>l/ha</option><option>kg/ha</option><option>Kö/m²</option><option>t/ha</option><option>m³/ha</option><option>dt/ha</option>
+          </select>
+        </div>
+      </div>
+      <div class="sec">
+        <label class="label" for="sNote">Notiz (optional)</label>
+        <textarea id="sNote" placeholder="z. B. Sorte, Mittel, nasse Stelle am Graben"></textarea>
+      </div>
+      <div class="sec">
+        <div class="label">Fotos (optional)</div>
+        <div class="photos" id="photos">
+          <label class="photo-btn" for="photoIn"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Foto</label>
+        </div>
+        <input class="hide-input" type="file" id="photoIn" accept="image/*" multiple>
+      </div>
+      <button class="btn btn-danger" id="delEntry" type="button" hidden>Eintrag löschen</button>
+    </div>
+  </div>
+  <div class="sheet-foot"><button class="btn btn-primary" id="save" type="button" disabled>Arbeitsschritt wählen</button></div>
+</div>
+
+<!-- FELDWAHL -->
+<div class="overlay" id="chooser" hidden>
+  <div class="card">
+    <div class="card-head"><h2>Feld wählen</h2><button class="btn btn-ghost btn-small" id="closeChooser" type="button">Schließen</button></div>
+    <input type="search" id="chooserSearch" placeholder="Suchen" aria-label="Feld suchen">
+    <div class="note" id="chooserNote"></div>
+    <div class="choices" id="choiceList"></div>
+  </div>
+</div>
+
+<!-- FELD-DETAIL -->
+<div class="overlay" id="fieldSheet" hidden>
+  <div class="card">
+    <div class="card-head"><h2>Feld</h2><button class="btn btn-ghost btn-small" id="closeField" type="button">Schließen</button></div>
+    <label class="label" for="fName">Name</label>
+    <input type="text" id="fName">
+    <div class="note" id="fInfo"></div>
+    <div class="row">
+      <button class="btn btn-ghost" id="fShow" type="button">Auf Karte</button>
+      <button class="btn btn-ghost" id="fLog" type="button">Tagebuch</button>
+    </div>
+    <div id="fHistory"></div>
+    <button class="btn btn-danger" id="fDelete" type="button">Feld löschen</button>
+  </div>
+</div>
+
+<!-- IMPORT-VORSCHAU -->
+<div class="overlay" id="importSheet" hidden>
+  <div class="card">
+    <div class="card-head"><h2>Import</h2><button class="btn btn-ghost btn-small" id="closeImport" type="button">Abbrechen</button></div>
+    <div class="note" id="importNote"></div>
+    <div class="choices" id="importList"></div>
+    <button class="btn btn-primary" id="importGo" type="button">Übernehmen</button>
+  </div>
+</div>
+
+<!-- BESTÄTIGEN -->
+<div class="overlay center" id="confirm" hidden>
+  <div class="card small">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmText"></p>
+    <div class="row end">
+      <button class="btn btn-ghost" id="confirmNo" type="button">Abbrechen</button>
+      <button class="btn btn-danger" id="confirmYes" type="button">Löschen</button>
+    </div>
+  </div>
+</div>
+
+<input class="hide-input" type="file" id="fileIn" accept=".zip,.shp,.kml,.kmz,.geojson,.json,.gpx,application/zip,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/geo+json,application/json,application/gpx+xml">
+<input class="hide-input" type="file" id="restoreIn" accept=".json,application/json">
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/shp.min.js"></script>
+<script src="vendor/togeojson.umd.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
